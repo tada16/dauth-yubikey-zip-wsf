@@ -1,0 +1,96 @@
+<job>
+
+<script language="VBScript">
+    ' YubiKey one-time password input dialog.
+    function vbInputBox(prpmpt)
+        vbInputBox = InputBox(prpmpt)
+    end function
+</script>
+
+<script language="JavaScript">
+    // Set your key here. 
+    var APIKEY = "<API KEY>";
+    var RAPIDKEY = "<RAPID KEY>";
+    
+    // Character type used for keyword.
+    var KEYBASE = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    // Character type used for password.
+    var PASSBASE = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ#%@";
+    
+    // Check that the file (drag and drop) is specified at startup.
+    var file_count = WScript.Arguments.Count();
+    if (file_count != 1) {
+        WScript.echo("Drag and drag one file.");
+        WScript.Quit();
+    }
+    
+    // Set target file.
+    var data_file = WScript.Arguments.Item(0);
+    var yubikey_otp =  vbInputBox("Enter YubiKey OTP");
+    if (!yubikey_otp) {
+        // Cancel
+        WScript.Quit();
+    } else if (yubikey_otp.length != 44) {
+        WScript.echo("YubiKey's one-time password is invalid.");
+        WScript.Quit();
+    }
+    var yubikey_id = yubikey_otp.substr(0, 12);
+    
+    // Generate password and keyword.
+    var password = get_random_string(64, PASSBASE);
+    var keyword= get_random_string(8, KEYBASE);
+    
+    // Call DAuth API.
+    var url = "https://dauth-trial.p.rapidapi.com/v1/dkvs";
+    var data = {
+        "device_type": 0,
+        "device_id": yubikey_id,
+        "key": keyword,
+        "value": '"' + password + '"'
+    };
+    var json = JSON_encode(data);
+    var result = http_post(APIKEY, RAPIDKEY, url, json);
+    
+    // ZIP (compress + encrypt) the target file using 7-ZIP.
+    var shell = WScript.CreateObject("WScript.Shell");
+    var zip_exe = '"C:\\Program Files\\7-Zip\\7z.exe\"';
+    var zip_file = data_file + "." + keyword + ".zip";
+    var cmd = zip_exe + ' a -p' + password + ' "' + zip_file + '" "' + data_file + '"';
+    shell.Run (cmd, 0, true);
+    
+    WScript.Echo("Created a zip file.\r\n" + zip_file);
+    
+    // Call DAuth API.
+    function http_post(api_key, rapid_key, url, data){
+        try {
+            var http = WScript.CreateObject("Msxml2.ServerXMLHTTP");
+            http.open("POST", url, false);
+            http.setRequestHeader("X-DAUTH-API-KEY", api_key);
+            http.setRequestHeader("X-RAPIDAPI-KEY", rapid_key);
+            http.setRequestHeader("Content-Type", "application/json");
+            http.send(data);
+            return http.responseText;
+        } catch (e) {
+            WScript.Echo("Error(" + (e.number & 0xFFFF) + "):" + e.message);
+        }
+    }
+    
+    // Returns a random string.
+    function get_random_string(len, range) {
+        var max = range.length;
+        var code = "";
+        for (var i = 0 ; i < len ; i++) {
+            code += range.charAt(Math.floor(Math.random() * max));
+        }
+        return code;
+    }
+    
+    // JSON encoding.
+    function JSON_encode(obj){
+        var htmlfile = WScript.CreateObject("htmlfile");
+        htmlfile.write('<meta http-equiv="x-ua-compatible" content="IE=11">');
+        return htmlfile.parentWindow.JSON.stringify(obj);
+    }
+</script>
+
+</job>

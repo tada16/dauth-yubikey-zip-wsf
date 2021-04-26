@@ -1,0 +1,82 @@
+<job>
+
+<script language="VBScript">
+    ' YubiKey one-time password input dialog.
+    function vbInputBox(prpmpt)
+        vbInputBox = InputBox(prpmpt)
+    end function
+</script>
+
+<script language="JavaScript">
+    // Set your key here. 
+    var APIKEY = "<API KEY>";
+    var RAPIDKEY = "<RAPID KEY>";
+    
+    // Check that the file (drag and drop) is specified at startup.
+    var file_count = WScript.Arguments.Count();
+    if (file_count != 1) {
+        WScript.echo("Drag and drag one file.");
+        WScript.Quit();
+    }
+    
+    // Set target file.
+    var zip_file = WScript.Arguments.Item(0);
+    var keyword = get_key_from_file(zip_file);
+    var yubikey_otp =  vbInputBox("Enter YubiKey OTP");
+    if (!yubikey_otp) {
+        // Cancel
+        WScript.Quit();
+    } else if (yubikey_otp.length != 44) {
+        WScript.echo("YubiKey's one-time password is invalid.");
+        WScript.Quit();
+    }
+    
+    // Call DAuth API.
+    var url = "https://dauth-trial.p.rapidapi.com/v1/dkvs/yubikey_otp?key=" + keyword + "&otp=" + yubikey_otp;
+    var result = http_get(APIKEY, RAPIDKEY, url);
+    var json = JSON_decode(result);
+    var password = json[0]["value"];
+    
+    // UNZIP (decompress + decrypt) the zip file using 7-ZIP.
+    var shell = WScript.CreateObject("WScript.Shell")
+    var zip_exe = "\"C:\\Program Files\\7-Zip\\7z.exe\""
+    var out_path = get_parent_folder(zip_file);
+    var cmd = zip_exe + " x -y -o\"" + out_path + "\" -p" + password + " \"" + zip_file + "\""
+    shell.Run (cmd, 0, true)
+    
+    WScript.Echo("Unzipped.");
+    
+    // test.txt.xxxxxxxx.zip => xxxxxxxx
+    function get_key_from_file(file_name) {
+        var words = file_name.split(".");
+        return words[words.length - 2];
+    }
+    
+    // JSON dencoding.
+    function JSON_decode(str){
+        var htmlfile = WScript.CreateObject("htmlfile");
+        htmlfile.write('<meta http-equiv="x-ua-compatible" content="IE=11">');
+        return htmlfile.parentWindow.JSON.parse(str);
+    }
+    
+    // Call DAuth API.
+    function http_get(api_key, rapid_key, url){
+        try {
+            var http = WScript.CreateObject("Msxml2.ServerXMLHTTP");
+            http.open("GET", url, false);
+            http.setRequestHeader("X-DAUTH-API-KEY", api_key);
+            http.setRequestHeader("X-RAPIDAPI-KEY", rapid_key);
+            http.send();
+            return http.responseText;
+        } catch (e) {
+            WScript.Echo("Error(" + (e.number & 0xFFFF) + "):" + e.message);
+        }
+    }
+    // File operations.
+    function get_parent_folder(file) {
+        var fs = new ActiveXObject("Scripting.FileSystemObject");
+        return fs.GetParentFolderName(file);
+    }
+</script>
+
+</job>
